@@ -20,8 +20,6 @@ INGESTION_CONFIG_PATH = ("/Volumes/adbanalitycs/default/vol_landing/metadata/ing
 
 config_content = dbutils.fs.head(INGESTION_CONFIG_PATH, 100000)
 sources = json.loads(config_content)
-#spark.sql("USE CATALOG adbanalitycs")
-#spark.sql("USE SCHEMA bronze")
 
 # ============================================
 # CREAR TABLAS DINÁMICAMENTE
@@ -37,23 +35,24 @@ for source in sources:
     source_name      = source["source_name"]
     source_path      = source["source_path"]
     file_format      = source["file_format"]
-    delimiter        = source["delimiter"]
-    header           = source["header"]
-    multiline        = source["multiline"]
+    #delimiter        = source["delimiter"]
+    #header           = source["header"]
+    #multiline        = source["multiline"]
     schema_location  = source["schema_location"]
     #checkpoint_path  = source["checkpoint_path"]
     #target_table     = source["target_table"]
     #partition_by     = source["partition_by"]
 
-    effective_format = "csv" if  file_format == "text" else file_format
+    #effective_format = "csv" if  file_format == "text" else file_format
 
     def create_table(
         source_name=source_name,
         source_path=source_path,
-        effective_format=effective_format,
-        delimiter=delimiter,
-        header=header,
-        multiline=multiline,
+        #effective_format=effective_format,
+        #delimiter=delimiter,
+        #header=header,
+        #multiline=multiline,
+        file_format=file_format,
         schema_location=schema_location
     ):
 
@@ -65,29 +64,42 @@ for source in sources:
             reader = (
                 spark.readStream
                 .format("cloudFiles")
-                .option("cloudFiles.format", effective_format)
+                .option("cloudFiles.format", file_format)
                 .option("cloudFiles.schemaLocation", schema_location)
-                .option("cloudFiles.inferColumnTypes", "false")
-                .option("rescuedDataColumn", "_rescued_data")
+                .option("cloudFiles.inferColumnTypes", "true")
+                #.option("cloudFiles.schemaEvolutionMode", "addNewColumns")
+                .option("cloudFiles.rescuedDataColumn", "_rescued_data")
             )
-            if effective_format == "csv":
 
+            #if effective_format == "csv":
+            #    reader = (
+            #        reader
+            #        .option("header", header)
+            #        .option("delimiter", delimiter)
+            #    )
+
+            if file_format == "json":
                 reader = (
                     reader
-                    .option("header", header)
-                    .option("delimiter", delimiter)
+                    .option("multiline", True)
+                    .option("cloudFiles.schemaEvolutionMode", "addNewColumns")
                 )
 
-            elif effective_format == "json":
-
+            elif file_format == "csv":
                 reader = (
                     reader
-                    .option("multiLine", multiline)
+                    .option("header",True)
+                    #.option("inferSchema",False)
+                    .option("cloudFiles.schemaEvolutionMode", "addNewColumns")
                 )
+
+            elif file_format == "text":
+                pass
+            
+            df = reader.load(source_path)
 
             return (
-                reader
-                .load(source_path)
+                df
                 .withColumn("_ingestion_timestamp", current_timestamp())
                 .withColumn("_source_file", col("_metadata.file_name"))
             )
